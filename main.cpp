@@ -348,14 +348,14 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
         double seqEstimate = total / singleCoreRate;
         double speedup = seqEstimate / std::max(1e-6, wallSecs);
         double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
-        std::cout << "\n--- parallel/distributed computing metrics ---\n";
+        std::cout << "\n--- Parallel/Distributed Computing Metrics ---\n";
         printf("%-30s: %.3f s  (extrapolated from single-core calibration)\n",
                "est. sequential time (T_seq)", seqEstimate);
-        printf("%-30s: %.2fx\n", "speedup (T_seq / T_parallel)", speedup);
-        printf("%-30s: %.1f%%\n", "efficiency (speedup / workers)", efficiency * 100.0);
+        printf("%-30s: %.2fx\n", "Speedup (T_seq / T_parallel)", speedup);
+        printf("%-30s: %.1f%%\n", "Efficiency (speedup / workers)", efficiency * 100.0);
     }
 
-    std::cout << "\n--- matches ---\n";
+    std::cout << "\n--- Matches ---\n";
     for (auto& kv : foundMatches)
         printf("  %-32s -> %s\n", kv.first.c_str(), kv.second.c_str());
     std::cout << "\033[1m======================================\033[0m\n";
