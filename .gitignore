@@ -1,0 +1,10 @@
+# Compiled binaries
+hash_cracker
+sequential
+
+# Generated dictionaries, target hashes and experiment output
+scripts/demo-dict.txt
+scripts/demo-targets.txt
+scripts/dict_*.txt
+scripts/targets_*.txt
+results.csv

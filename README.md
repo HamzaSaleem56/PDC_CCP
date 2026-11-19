@@ -161,7 +161,38 @@ At the end of a run you now get, in addition to the original summary:
   `./sequential` is still there as a separate standalone baseline, and
   `run_experiments.sh` uses it to sweep worker counts and problem sizes.
 
-## 2. Build
+## 2. Run it in the browser (GitHub Codespaces) — no local setup
+
+The easiest way to try this without installing MPI, a compiler, or anything
+else on your own machine. Everything is pre-configured in `.devcontainer/`.
+
+1. Open the repo on GitHub.
+2. Click the green **Code** button → **Codespaces** tab → **Create codespace
+   on main**.
+3. Wait a minute or two while it builds the environment (MPI + OpenSSL are
+   installed automatically, and the project is compiled for you).
+4. In the terminal that opens, run:
+
+   ```bash
+   ./demo.sh
+   ```
+
+That builds (if needed), generates a sample dictionary and target hashes, and
+runs the full distributed crack — you'll see the live master/worker message
+trace and the final speedup summary.
+
+```bash
+./demo.sh              # 4 workers, quick estimated speedup
+./demo.sh 2            # 2 workers instead of 4
+./demo.sh 4 baseline   # real measured speedup (runs a sequential pass first)
+```
+
+Everything runs inside the single Codespace (one machine), so the master and
+all worker ranks live in that one container — which is exactly the setup this
+project demonstrates. When you're done, stop or delete the Codespace from your
+GitHub Codespaces page so it doesn't keep using your free hours.
+
+## 3. Build it yourself (local machine)
 
 ```bash
 sudo apt-get update
@@ -170,7 +201,7 @@ cd distributed_hash_cracker
 make            # builds ./hash_cracker and ./sequential
 ```
 
-## 3. Run
+## 4. Run
 
 ```bash
 # 1. generate a synthetic dictionary and some reachable target hashes
@@ -212,7 +243,7 @@ sequential; in a core-starved environment the MPI/OpenMP coordination
 overhead can dominate, which is itself a useful, reportable result for
 your efficiency analysis.
 
-## 4. What was actually verified (not just compiled)
+## 5. What was actually verified (not just compiled)
 - Builds cleanly with `-Wall`, no warnings.
 - Single-target MD5 dictionary attack: sequential and distributed agree.
 - **Multi-target bug found and fixed during testing**: an early-exit
@@ -227,7 +258,7 @@ your efficiency analysis.
   master's own log output (`[MASTER] rank 2 overdue ... -> reassigning
   chunk`), with the run still completing with correct results.
 
-## 5. Experiments for your report
+## 6. Experiments for your report
 ```bash
 bash scripts/run_experiments.sh
 ```
@@ -243,7 +274,7 @@ From that, compute per the course's expected metrics:
   dictionary load), and against **Gustafson's Law** for the weak-scaling
   case.
 
-## 6. CCP attribute mapping (IEA WP1–WP7)
+## 7. CCP attribute mapping (IEA WP1–WP7)
 | Attribute | How this project satisfies it |
 |---|---|
 | WP1 (mandatory) | First-principles parallel/distributed computing theory: MPI message passing, OpenMP shared-memory parallelism, Amdahl/Gustafson analysis, cryptographic hashing |

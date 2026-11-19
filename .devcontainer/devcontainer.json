@@ -1,0 +1,17 @@
+{
+  "name": "PDC_CCP — MPI + OpenMP Hash Cracker",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "hostRequirements": {
+    "cpus": 4
+  },
+  "postCreateCommand": "make",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools"
+      ]
+    }
+  }
+}
