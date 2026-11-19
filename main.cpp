@@ -385,7 +385,7 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
         double speedup = baselineSecs / std::max(1e-6, wallSecs);
         double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
         std::cout << "\n--- Parallel/Distributed Computing Metrics (measured) ---\n";
-        printf("\n", "Sequential Time (T_seq)", baselineSecs);
+        printf("%-30s: %.3f s\n", "Sequential Time (T_seq)", baselineSecs);
         printf("%-30s: %.2fx\n", "Speedup (T_seq / T_parallel)", speedup);
         printf("%-30s: %.1f%%\n", "Efficiency (speedup / workers)", efficiency * 100.0);
     } else if (args.calibrate && singleCoreRate > 0) {
