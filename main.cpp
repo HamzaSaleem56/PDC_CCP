@@ -385,8 +385,7 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
         double speedup = baselineSecs / std::max(1e-6, wallSecs);
         double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
         std::cout << "\n--- Parallel/Distributed Computing Metrics (measured) ---\n";
-        printf("%-30s: %.3f s  (real sequential run, full sweep)\n",
-               "sequential time (T_seq)", baselineSecs);
+        printf("\n", "Sequential Time (T_seq)", baselineSecs);
         printf("%-30s: %.2fx\n", "Speedup (T_seq / T_parallel)", speedup);
         printf("%-30s: %.1f%%\n", "Efficiency (speedup / workers)", efficiency * 100.0);
     } else if (args.calibrate && singleCoreRate > 0) {
@@ -510,14 +509,14 @@ int main(int argc, char** argv) {
     double baselineSecs = 0.0;
     if (args.baseline) {
         if (rank == 0) {
-            std::cout << "\n\033[1m--- phase 1: sequential baseline (1 process, 1 thread) ---\033[0m\n";
+            std::cout << "\n\033[1m--- Phase 1: Sequential Baseline (1 process, 1 thread) ---\033[0m\n";
             std::cout << "running the full search space sequentially, please wait...\n";
             size_t seqFound = 0;
             baselineSecs = runSequentialBaseline(dict, totalCandidates(dict.size()),
                                                  algo, args.salt, targets, seqFound);
             printf("%-30s: %zu / %zu\n", "targets found", seqFound, targets.size());
             printf("%-30s: %.3f s\n", "wall time (T_seq)", baselineSecs);
-            std::cout << "\n\033[1m--- phase 2: distributed run (MPI + OpenMP) ---\033[0m\n";
+            std::cout << "\n\033[1m--- Phase 2: Distributed Run (MPI + OpenMP) ---\033[0m\n";
         }
         MPI_Bcast(&baselineSecs, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
         MPI_Barrier(MPI_COMM_WORLD);
