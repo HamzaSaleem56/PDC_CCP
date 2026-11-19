@@ -327,18 +327,19 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
     double wallSecs = std::chrono::duration<double>(Clock::now() - t0).count();
 
     std::cout << "\n\033[1m===== RUN SUMMARY (distributed) =====\033[0m\n";
-    std::cout << "workers                     : " << numWorkers << "\n";
-    std::cout << "search space                : " << fmtNum(total) << " candidates\n";
-    std::cout << "processed                   : " << fmtNum(totalProcessed) << "\n";
-    std::cout << "targets found                : " << foundMatches.size() << " / " << targets.size() << "\n";
-    std::cout << "reassigned (stalled) chunks  : " << reassignedChunks << "\n";
-    std::cout << "wall time (T_parallel)       : " << wallSecs << " s\n";
-    std::cout << "aggregate throughput         : " << fmtNum((long long)(totalProcessed / std::max(1e-6, wallSecs))) << " cand/s\n";
+    printf("%-30s: %d\n", "workers", numWorkers);
+    printf("%-30s: %s candidates\n", "search space", fmtNum(total).c_str());
+    printf("%-30s: %s\n", "processed", fmtNum(totalProcessed).c_str());
+    printf("%-30s: %zu / %zu\n", "targets found", foundMatches.size(), targets.size());
+    printf("%-30s: %d\n", "reassigned (stalled) chunks", reassignedChunks);
+    printf("%-30s: %.3f s\n", "wall time (T_parallel)", wallSecs);
+    printf("%-30s: %s cand/s\n", "aggregate throughput",
+           fmtNum((long long)(totalProcessed / std::max(1e-6, wallSecs))).c_str());
 
     std::cout << "\n--- per-worker contribution (shows how well load was balanced) ---\n";
     for (auto& kv : processedByWorker) {
         double share = totalProcessed > 0 ? 100.0 * kv.second / totalProcessed : 0.0;
-        printf("%s  WORKER-%-2d : %12s candidates  (%.1f%% of all work done, final est. rate %s cand/s)%s\n",
+        printf("%s  WORKER-%-2d : %12s candidates  (%5.1f%% of all work, final est. rate %10s cand/s)%s\n",
                traceColor(kv.first), kv.first, fmtNum(kv.second).c_str(), share,
                fmtNum((long long)throughput[kv.first]).c_str(), "\033[0m");
     }
@@ -348,17 +349,15 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
         double speedup = seqEstimate / std::max(1e-6, wallSecs);
         double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
         std::cout << "\n--- parallel/distributed computing metrics ---\n";
-        std::cout << "est. sequential time (T_seq)  : " << seqEstimate << " s"
-                  << "  (extrapolated from single-core calibration, not a full run)\n";
-        std::cout << "speedup  (T_seq / T_parallel)  : " << speedup << "x\n";
-        std::cout << "efficiency (speedup / workers)  : " << (efficiency * 100.0) << "%\n";
-        std::cout << "  note: for the rigorous ground-truth number, run ./sequential on the\n";
-        std::cout << "  same dict/targets and compare its wall time directly (see README / run_experiments.sh).\n";
+        printf("%-30s: %.3f s  (extrapolated from single-core calibration)\n",
+               "est. sequential time (T_seq)", seqEstimate);
+        printf("%-30s: %.2fx\n", "speedup (T_seq / T_parallel)", speedup);
+        printf("%-30s: %.1f%%\n", "efficiency (speedup / workers)", efficiency * 100.0);
     }
 
     std::cout << "\n--- matches ---\n";
     for (auto& kv : foundMatches)
-        std::cout << "  " << kv.first << "  ->  " << kv.second << "\n";
+        printf("  %-32s -> %s\n", kv.first.c_str(), kv.second.c_str());
     std::cout << "\033[1m======================================\033[0m\n";
 }
 
