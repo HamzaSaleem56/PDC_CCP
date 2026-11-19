@@ -9,8 +9,14 @@
 //   mpirun -np <P> ./hash_cracker --dict dict.txt --targets targets.txt
 //                                 --algo md5|sha256 [--salt SALT]
 //                                 [--time-slice 0.5] [--timeout-factor 4.0]
-//                                 [--no-trace] [--no-calibrate]
+//                                 [--no-trace] [--no-calibrate] [--baseline]
 //                                 [--stall-rank R --stall-seconds S]
+//
+// --baseline runs a real sequential search first (rank 0, single thread, no
+// OpenMP/MPI) and uses its measured wall time as T_seq, instead of the
+// extrapolated single-core estimate. In this mode BOTH the sequential pass
+// and the parallel phase sweep the entire search space, so the two do
+// identical work and speedup = T_seq / T_parallel is a true measurement.
 //
 // targets.txt: one hex hash per line (all cracked, or search space
 // exhausted, ends the run).
@@ -48,6 +54,7 @@ struct Args {
     double stallSeconds = 10.0;
     bool trace = true;              // live master<->worker message trace on stdout
     bool calibrate = true;          // quick single-core calibration for speedup estimate
+    bool baseline = false;          // run a real sequential pass first for a measured T_seq
 };
 
 static Args parseArgs(int argc, char** argv) {
@@ -65,6 +72,7 @@ static Args parseArgs(int argc, char** argv) {
         else if (s == "--stall-seconds") a.stallSeconds = std::stod(next());
         else if (s == "--no-trace") a.trace = false;
         else if (s == "--no-calibrate") a.calibrate = false;
+        else if (s == "--baseline") a.baseline = true;
     }
     return a;
 }
@@ -109,19 +117,45 @@ static double calibrateSingleCoreRate(const std::vector<std::string>& dict, long
     return sampleSize / std::max(1e-6, secs);
 }
 
+// Real, measured sequential baseline (--baseline). One process, one thread,
+// no OpenMP and no MPI -- this is the same work sequential.cpp does, run
+// in-process so its timing can be fed straight into the speedup calculation.
+//
+// It deliberately sweeps the WHOLE search space instead of stopping at the
+// last match. The parallel phase is made to sweep the whole space too in this
+// mode, so both sides hash exactly the same number of candidates and
+// T_seq / T_parallel is a fair, apples-to-apples speedup rather than an
+// estimate.
+static double runSequentialBaseline(const std::vector<std::string>& dict, long long total,
+                                    Algo algo, const std::string& salt,
+                                    const std::unordered_set<std::string>& targets,
+                                    size_t& foundOut) {
+    std::unordered_set<std::string> matched;
+    auto start = std::chrono::steady_clock::now();
+    for (long long i = 0; i < total; i++) {
+        std::string cand = candidateAt(dict, i);
+        std::string h = hashCandidate(cand, salt, algo);
+        if (targets.count(h)) matched.insert(h);
+    }
+    double secs = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+    foundOut = matched.size();
+    return secs;
+}
+
 // ======================================================================
 // MASTER
 // ======================================================================
 static void runMaster(const Args& args, const std::vector<std::string>& dict,
                        std::unordered_set<std::string> targets, Algo algo,
-                       int worldSize, double mpiT0) {
+                       int worldSize, double mpiT0, double baselineSecs) {
     using Clock = std::chrono::steady_clock;
     auto t0 = Clock::now();
 
     long long total = totalCandidates(dict.size());
 
+    // With --baseline we have a real measured T_seq, so the estimate is redundant.
     double singleCoreRate = 0.0;
-    if (args.calibrate) {
+    if (args.calibrate && !args.baseline) {
         singleCoreRate = calibrateSingleCoreRate(dict, total, algo, args.salt);
         std::cout << "[MASTER] calibration: one CPU core hashes ~" << fmtNum((long long)singleCoreRate)
                   << " candidates/sec (used for the speedup estimate below)\n";
@@ -192,7 +226,10 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
                 MPI_Recv(&dummy, 1, MPI_INT, worker, TAG_READY, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                 bool stop = exhausted && requeue.empty() && outstanding.empty();
-                stop = stop || allTargetsFound();
+                // In --baseline mode the sequential pass scanned the full space, so the
+                // parallel phase must too -- otherwise it would do less work and the
+                // speedup number would be inflated.
+                if (!args.baseline) stop = stop || allTargetsFound();
 
                 if (stop) {
                     MPI_Send(nullptr, 0, MPI_BYTE, worker, TAG_TERMINATE, MPI_COMM_WORLD);
@@ -344,11 +381,19 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
                fmtNum((long long)throughput[kv.first]).c_str(), "\033[0m");
     }
 
-    if (args.calibrate && singleCoreRate > 0) {
+    if (args.baseline && baselineSecs > 0) {
+        double speedup = baselineSecs / std::max(1e-6, wallSecs);
+        double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
+        std::cout << "\n--- Parallel/Distributed Computing Metrics (measured) ---\n";
+        printf("%-30s: %.3f s  (real sequential run, full sweep)\n",
+               "sequential time (T_seq)", baselineSecs);
+        printf("%-30s: %.2fx\n", "Speedup (T_seq / T_parallel)", speedup);
+        printf("%-30s: %.1f%%\n", "Efficiency (speedup / workers)", efficiency * 100.0);
+    } else if (args.calibrate && singleCoreRate > 0) {
         double seqEstimate = total / singleCoreRate;
         double speedup = seqEstimate / std::max(1e-6, wallSecs);
         double efficiency = numWorkers > 0 ? speedup / numWorkers : 0.0;
-        std::cout << "\n--- Parallel/Distributed Computing Metrics ---\n";
+        std::cout << "\n--- Parallel/Distributed Computing Metrics (estimated) ---\n";
         printf("%-30s: %.3f s  (extrapolated from single-core calibration)\n",
                "est. sequential time (T_seq)", seqEstimate);
         printf("%-30s: %.2fx\n", "Speedup (T_seq / T_parallel)", speedup);
@@ -443,10 +488,6 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Shared "time zero" so every rank's trace timestamps line up on one timeline.
-    double mpiT0 = MPI_Wtime();
-    MPI_Bcast(&mpiT0, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
-
     std::vector<std::string> dict = loadLines(args.dictPath);
     std::vector<std::string> targetLines = loadLines(args.targetsPath);
     std::unordered_set<std::string> targets(targetLines.begin(), targetLines.end());
@@ -461,7 +502,34 @@ int main(int argc, char** argv) {
         std::cout << "Dictionary words: " << dict.size()
                   << "  | variants/word: " << VARIANTS_PER_WORD
                   << "  | total search space: " << totalCandidates(dict.size()) << "\n";
-        runMaster(args, dict, targets, algo, worldSize, mpiT0);
+    }
+
+    // --- phase 1: real sequential baseline (optional, --baseline) ---
+    // Rank 0 does the whole search on one thread while the workers wait at the
+    // barrier. Its measured wall time becomes T_seq for the speedup below.
+    double baselineSecs = 0.0;
+    if (args.baseline) {
+        if (rank == 0) {
+            std::cout << "\n\033[1m--- phase 1: sequential baseline (1 process, 1 thread) ---\033[0m\n";
+            std::cout << "running the full search space sequentially, please wait...\n";
+            size_t seqFound = 0;
+            baselineSecs = runSequentialBaseline(dict, totalCandidates(dict.size()),
+                                                 algo, args.salt, targets, seqFound);
+            printf("%-30s: %zu / %zu\n", "targets found", seqFound, targets.size());
+            printf("%-30s: %.3f s\n", "wall time (T_seq)", baselineSecs);
+            std::cout << "\n\033[1m--- phase 2: distributed run (MPI + OpenMP) ---\033[0m\n";
+        }
+        MPI_Bcast(&baselineSecs, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        MPI_Barrier(MPI_COMM_WORLD);
+    }
+
+    // Shared "time zero" so every rank's trace timestamps line up on one timeline.
+    // Set after the baseline so the trace clock starts at the distributed phase.
+    double mpiT0 = MPI_Wtime();
+    MPI_Bcast(&mpiT0, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+
+    if (rank == 0) {
+        runMaster(args, dict, targets, algo, worldSize, mpiT0, baselineSecs);
     } else {
         runWorker(args, dict, targets, algo, rank, mpiT0);
     }

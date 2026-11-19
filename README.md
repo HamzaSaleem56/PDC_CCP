@@ -142,11 +142,24 @@ At the end of a run you now get, in addition to the original summary:
   with no MPI/OpenMP involved, to estimate one core's raw candidates/sec),
   extrapolates an estimated sequential time from that, and reports
   `speedup = T_seq_estimate / T_parallel` and `efficiency = speedup / workers`.
-  This is clearly labelled as an *estimate* — for the rigorous,
-  ground-truth number for your report, run `./sequential` on the exact
-  same dictionary/targets and compare its actually-measured wall time
-  (see `run_experiments.sh`, which does this automatically). Disable the
-  quick estimate with `--no-calibrate` if you only want the real thing.
+  This is clearly labelled as an *estimate*. Disable it with `--no-calibrate`.
+- **Measured speedup with `--baseline`** (recommended for the report): the
+  program runs a real sequential search itself before the distributed phase.
+  Rank 0 does the whole search space on a single thread with no OpenMP and no
+  MPI, while the workers wait at a barrier; its measured wall time becomes
+  `T_seq`, and `speedup = T_seq / T_parallel` is then a genuine measurement
+  rather than an extrapolation. The summary is labelled *(measured)*.
+
+  In this mode **both** sides sweep the entire search space. Normally both the
+  sequential and distributed runs stop as soon as every target is cracked, but
+  they stop at different points — workers always finish their whole assigned
+  chunk, so the parallel side overshoots and does more work than the sequential
+  side did, which makes the speedup read artificially low. Forcing a full sweep
+  on both sides keeps the comparison apples-to-apples. The cost is that the run
+  takes longer, which is why `--baseline` is opt-in.
+
+  `./sequential` is still there as a separate standalone baseline, and
+  `run_experiments.sh` uses it to sweep worker counts and problem sizes.
 
 ## 2. Build
 
@@ -169,12 +182,17 @@ python3 scripts/gen_targets.py dict.txt 3 md5 > targets.txt   # plaintexts print
 
 # 3. distributed + parallel run (4 worker ranks + 1 master)
 mpirun -np 5 ./hash_cracker --dict dict.txt --targets targets.txt --algo md5
+
+# 4. same run, but measure the sequential baseline in-process for a REAL
+#    speedup number instead of an extrapolated estimate (slower, but exact)
+mpirun -np 5 ./hash_cracker --dict dict.txt --targets targets.txt --algo md5 --baseline
 ```
 
 Useful flags: `--salt STRING`, `--time-slice 0.5` (seconds of work per
 adaptive chunk), `--timeout-factor 4.0` (reassignment sensitivity),
 `--no-trace` (suppress the live message trace + dashboard), `--no-calibrate`
-(skip the automatic speedup estimate).
+(skip the automatic speedup estimate), `--baseline` (run a real sequential
+pass first and report measured speedup/efficiency).
 
 ### Demoing fault tolerance live
 ```bash
