@@ -197,8 +197,9 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
                 if (stop) {
                     MPI_Send(nullptr, 0, MPI_BYTE, worker, TAG_TERMINATE, MPI_COMM_WORLD);
                     if (args.trace) {
-                        char buf[96];
-                        snprintf(buf, sizeof(buf), "\u2500\u2500TERMINATE\u2500\u2500\u2500\u2500\u2500\u25b6 WORKER-%d (no more work)", worker);
+                        char wlabel[16], buf[96];
+                        snprintf(wlabel, sizeof(wlabel), "WORKER-%d", worker);
+                        snprintf(buf, sizeof(buf), "-> %-9s : TERMINATE (no more work)", wlabel);
                         traceLine(mpiT0, 0, buf);
                     }
                     terminatedWorkers++;
@@ -228,8 +229,9 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
                     // immediately terminating it; it can't help further.
                     MPI_Send(nullptr, 0, MPI_BYTE, worker, TAG_TERMINATE, MPI_COMM_WORLD);
                     if (args.trace) {
-                        char buf[96];
-                        snprintf(buf, sizeof(buf), "\u2500\u2500TERMINATE\u2500\u2500\u2500\u2500\u2500\u25b6 WORKER-%d (nothing left)", worker);
+                        char wlabel[16], buf[96];
+                        snprintf(wlabel, sizeof(wlabel), "WORKER-%d", worker);
+                        snprintf(buf, sizeof(buf), "-> %-9s : TERMINATE (nothing left)", wlabel);
                         traceLine(mpiT0, 0, buf);
                     }
                     terminatedWorkers++;
@@ -242,10 +244,11 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
                 MPI_Send(&task, sizeof(Task), MPI_BYTE, worker, TAG_TASK, MPI_COMM_WORLD);
 
                 if (args.trace) {
-                    char buf[160];
-                    snprintf(buf, sizeof(buf), "\u2500\u2500TASK id=%lld range=[%s,%s) size=%s\u2500\u2500\u25b6 WORKER-%d",
-                             task.task_id, fmtNum(start).c_str(), fmtNum(end).c_str(),
-                             fmtNum(end - start).c_str(), worker);
+                    char wlabel[16], buf[160];
+                    snprintf(wlabel, sizeof(wlabel), "WORKER-%d", worker);
+                    snprintf(buf, sizeof(buf), "-> %-9s : TASK id=%lld range=[%s,%s) size=%s",
+                             wlabel, task.task_id, fmtNum(start).c_str(), fmtNum(end).c_str(),
+                             fmtNum(end - start).c_str());
                     traceLine(mpiT0, 0, buf);
                 }
 
@@ -276,7 +279,7 @@ static void runMaster(const Args& args, const std::vector<std::string>& dict,
 
                     if (args.trace) {
                         char buf[160];
-                        snprintf(buf, sizeof(buf), "\u2500\u2500RESULT id=%lld processed=%s found=%d\u2500\u2500\u25b6 MASTER",
+                        snprintf(buf, sizeof(buf), "-> %-9s : RESULT id=%lld processed=%s found=%d", "MASTER",
                                  res.task_id, fmtNum(res.processed).c_str(), res.foundCount);
                         traceLine(mpiT0, worker, buf);
                     }
@@ -366,7 +369,11 @@ static void runWorker(const Args& args, const std::vector<std::string>& dict,
                        const std::unordered_set<std::string>& targets, Algo algo,
                        int rank, double mpiT0) {
     while (true) {
-        if (args.trace) traceLine(mpiT0, rank, "\u2500\u2500READY\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u25b6 MASTER   (requesting work)");
+        if (args.trace) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), "-> %-9s : READY (requesting work)", "MASTER");
+            traceLine(mpiT0, rank, buf);
+        }
         MPI_Send(nullptr, 0, MPI_INT, 0, TAG_READY, MPI_COMM_WORLD);
 
         MPI_Status status;
